@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Lambda folder
+lambda/package/
+lambda/deployment.zip
+*.zip
+
+# Unneeded JSON files
+test_event.json
+attack_event.json
+real_ddos_event.json
