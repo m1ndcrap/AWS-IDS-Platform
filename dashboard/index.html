@@ -431,6 +431,37 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        .tooltip {
+            position: fixed;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 10px 14px;
+            font-family: var(--mono);
+            font-size: 11px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.15s;
+            z-index: 1000;
+            min-width: 140px;
+        }
+
+        .tooltip.visible { opacity: 1; }
+
+        .tooltip-title {
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 3px;
+        }
     </style>
 </head>
 
@@ -446,27 +477,34 @@
     <div class="stats-grid">
         <div class="stat-card blue">
             <div class="stat-label">Total Events</div>
-            <div class="stat-value" id="total">—</div>
+            <div class="stat-value" id="total">-</div>
         </div>
         <div class="stat-card red">
             <div class="stat-label">Threats Detected</div>
-            <div class="stat-value" id="threats">—</div>
+            <div class="stat-value" id="threats">-</div>
         </div>
         <div class="stat-card green">
             <div class="stat-label">Benign Traffic</div>
-            <div class="stat-value" id="benign">—</div>
+            <div class="stat-value" id="benign">-</div>
         </div>
         <div class="stat-card amber">
             <div class="stat-label">Avg Threat Score</div>
-            <div class="stat-value" id="avg-score">—</div>
+            <div class="stat-value" id="avg-score">-</div>
         </div>
     </div>
 
     <div class="main-grid">
         <div class="panel">
-            <div class="panel-header">
-                <span class="panel-title">Event Log</span>
-                <button class="refresh-btn" onclick="loadData()">REFRESH</button>
+            <div class="panel-header" style="gap:12px;flex-wrap:wrap">
+            <span class="panel-title">Event Log</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+                <span style="font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:0.1em">SORT</span>
+                <select id="sort-field" style="background:var(--bg);color:var(--text);border:1px solid var(--border);font-family:var(--mono);font-size:10px;padding:4px 8px;cursor:pointer;outline:none">
+                <option value="threat_score">Threat Score</option>
+                <option value="timestamp">Timestamp</option>
+                </select>
+                <button id="sort-dir" onclick="toggleSort()" style="background:none;border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:12px;padding:4px 10px;cursor:pointer;transition:all 0.2s">↓</button>
+            </div>
             </div>
             <div id="table-container">
                 <div class="loading">LOADING</div>
@@ -480,14 +518,22 @@
             <div class="donut-wrap">
                 <div class="donut-container">
                     <svg class="donut-svg" width="160" height="160" viewBox="0 0 160 160">
-                        <circle cx="80" cy="80" r="60" fill="none" stroke="#1e2d3d" stroke-width="20" />
-                        <circle id="donut-threat" cx="80" cy="80" r="60" fill="none" stroke="#ff4444" stroke-width="20"
-                            stroke-dasharray="0 377" stroke-linecap="butt" />
-                        <circle id="donut-benign" cx="80" cy="80" r="60" fill="none" stroke="#00ff88" stroke-width="20"
-                            stroke-dasharray="0 377" stroke-linecap="butt" />
+                        <circle cx="80" cy="80" r="60" fill="none" stroke="#1e2d3d" stroke-width="20"/>
+                        <circle id="donut-threat" cx="80" cy="80" r="60" fill="none"
+                        stroke="#ff4444" stroke-width="20"
+                        stroke-dasharray="0 377" stroke-linecap="butt"
+                        style="cursor:pointer"
+                        onmouseenter="showDonutTooltip(event, 'threat')"
+                        onmouseleave="hideDonutTooltip()"/>
+                        <circle id="donut-benign" cx="80" cy="80" r="60" fill="none"
+                        stroke="#00ff88" stroke-width="20"
+                        stroke-dasharray="0 377" stroke-linecap="butt"
+                        style="cursor:pointer"
+                        onmouseenter="showDonutTooltip(event, 'benign')"
+                        onmouseleave="hideDonutTooltip()"/>
                     </svg>
                     <div class="donut-center">
-                        <div class="donut-pct" id="threat-pct">—</div>
+                        <div class="donut-pct" id="threat-pct">-</div>
                         <div class="donut-label">threats</div>
                     </div>
                 </div>
@@ -495,12 +541,12 @@
                     <div class="legend-item">
                         <span class="legend-left"><span class="legend-dot" style="background:var(--red)"></span>DDoS /
                             Attack</span>
-                        <span class="legend-right" id="leg-threats">—</span>
+                        <span class="legend-right" id="leg-threats">-</span>
                     </div>
                     <div class="legend-item">
                         <span class="legend-left"><span class="legend-dot"
                                 style="background:var(--green)"></span>Benign</span>
-                        <span class="legend-right" id="leg-benign">—</span>
+                        <span class="legend-right" id="leg-benign">-</span>
                     </div>
                 </div>
             </div>
@@ -510,113 +556,238 @@
     <script>
     const API = 'https://6ly8jrd3t5.execute-api.us-east-2.amazonaws.com/prod/results';
 
-    async function loadData() {
+    function renderDashboard(items) {
+        const threats = items.filter(i => i.prediction == 1 || i.prediction === '1');
+        const benign = items.filter(i => i.prediction == 0 || i.prediction === '0');
+        const total = items.length;
+        const avgScore = total > 0
+            ? (items.reduce((s, i) => s + parseFloat(i.threat_score || 0), 0) / total)
+            : 0;
+
+        document.getElementById('total').textContent = total;
+        document.getElementById('threats').textContent = threats.length;
+        document.getElementById('benign').textContent = benign.length;
+        document.getElementById('avg-score').textContent = (avgScore * 100).toFixed(0) + '%';
+
+        // Count by attack type
+        const typeCounts = {};
+        threats.forEach(i => {
+            const t = i.attack_type || i.label || 'Unknown';
+            typeCounts[t] = (typeCounts[t] || 0) + 1;
+        });
+        typeCounts['BENIGN'] = benign.length;
+
+        // Build donut tooltip data
+        donutData.benign = { total: benign.length };
+        donutData.threat = { total: threats.length };
+        Object.entries(typeCounts).forEach(([type, count]) => {
+            if (type !== 'BENIGN') donutData.threat[type] = count;
+        });
+
+        // Donut
+        const circ = 2 * Math.PI * 60;
+        const threatPct = total > 0 ? threats.length / total : 0;
+        const benignPct = 1 - threatPct;
+        document.getElementById('donut-threat').setAttribute('stroke-dasharray', `${threatPct * circ} ${circ}`);
+        document.getElementById('donut-benign').setAttribute('stroke-dasharray', `${benignPct * circ} ${circ}`);
+        document.getElementById('donut-benign').setAttribute('stroke-dashoffset', -(threatPct * circ));
+        document.getElementById('threat-pct').textContent = (threatPct * 100).toFixed(0) + '%';
+
+        // Legend
+        const colors = { BENIGN: '#00ff88', DDoS: '#ff4444', DoS: '#ff6600', PortScan: '#ffaa00', BruteForce: '#cc44ff', WebAttack: '#ff44aa', Heartbleed: '#00ffff', Infiltration: '#ff8888' };
+
+        const legendHtml = Object.entries(typeCounts).map(([type, count]) => {
+        const isActive = activeFilters.size === 0 || activeFilters.has(type);
+        const color = colors[type] || '#888';
+        return `
+            <div class="legend-item" onclick="toggleFilter('${type}')" style="cursor:pointer;opacity:${activeFilters.size === 0 || activeFilters.has(type) ? 1 : 0.3};transition:opacity 0.2s;padding:4px 6px;border-radius:2px;${activeFilters.has(type) ? `background:${color}18;border:1px solid ${color}44` : 'border:1px solid transparent'}">
+            <span class="legend-left"><span class="legend-dot" style="background:${color}"></span>${type}</span>
+            <span class="legend-right">${count}</span>
+            </div>`;
+        }).join('');
+        document.getElementById('legend').innerHTML = legendHtml;
+
+        // Table
+        const sortField = document.getElementById('sort-field').value;
+        const filtered = activeFilters.size === 0
+            ? items
+            : items.filter(i => activeFilters.has(i.attack_type || i.label));
+
+        const sorted = [...filtered].sort((a, b) => {
+            let valA, valB;
+
+            if (sortField === 'threat_score') {
+                valA = parseFloat(a.threat_score || 0);
+                valB = parseFloat(b.threat_score || 0);
+            } else {
+                valA = new Date(a.timestamp || 0).getTime();
+                valB = new Date(b.timestamp || 0).getTime();
+            }
+
+            return sortAsc ? valA - valB : valB - valA;
+        });
+
+        const rows = sorted.map(item => {
+            const score = parseFloat(item.threat_score || 0);
+            const isAttack = item.prediction == 1 || item.prediction === '1';
+            const label = item.attack_type || item.label || 'BENIGN';
+            const pct = (score * 100).toFixed(1);
+            const time = item.timestamp ? item.timestamp.replace('T', ' ').replace('Z', '') : '-';
+            const color = colors[label] || '#888';
+            return `
+            <tr>
+                <td style="color:var(--muted);font-size:11px">${time}</td>
+                <td style="font-size:11px">${item.event_id}</td>
+                <td>
+                <span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}44">
+                    ${isAttack ? '⚠ ' : ' '}${label}
+                </span>
+                </td>
+                <td>
+                <div class="score-bar">
+                    <div class="score-track">
+                    <div class="score-fill ${score > 0.5 ? 'high' : 'low'}" style="width:${pct}%;background:${color}"></div>
+                    </div>
+                    <span class="score-num">${pct}%</span>
+                </div>
+                </td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('table-container').innerHTML = `
+            <table>
+            <thead>
+                <tr>
+                <th>Timestamp</th>
+                <th>Event ID</th>
+                <th>Attack Type</th>
+                <th>Threat Score</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            </table>`;
+    }
+
+    // WebSocket real-time feed implementation
+    const WS_URL = 'wss://229ixzo7u7.execute-api.us-east-2.amazonaws.com/prod';
+    let ws;
+    let allItems = [];
+    let sortAsc = false;
+    let activeFilters = new Set();
+
+    function toggleSort() {
+        sortAsc = !sortAsc;
+        document.getElementById('sort-dir').textContent = sortAsc ? '↑' : '↓';
+        renderDashboard(allItems);
+    }
+
+    function toggleFilter(type) {
+        if (activeFilters.has(type)) {
+            activeFilters.delete(type);
+        } else {
+            activeFilters.add(type);
+        }
+
+        renderDashboard(allItems);
+    }
+
+    let donutData = { threat: {}, benign: {} };
+
+    function showDonutTooltip(event, slice) {
+        const tooltip = document.getElementById('donut-tooltip');
+        const data = donutData[slice];
+        const color = slice === 'threat' ? 'var(--red)' : 'var(--green)';
+        const title = slice === 'threat' ? 'Threats' : 'Benign';
+
+        let rowsHtml = '';
+
+        if (slice === 'benign') {
+            rowsHtml = `<div class="tooltip-row"><span>BENIGN</span><span style="color:var(--green)">${data.total || 0}</span></div>`;
+        } else {
+            Object.entries(data).forEach(([type, count]) => {
+                if (type === 'total') return;
+                const c = { DDoS: '#ff4444', DoS: '#ff6600', PortScan: '#ffaa00', BruteForce: '#cc44ff', WebAttack: '#ff44aa', Heartbleed: '#00ffff', Infiltration: '#ff8888' }[type] || '#888';
+                rowsHtml += `<div class="tooltip-row"><span style="color:${c}">${type}</span><span>${count}</span></div>`;
+            });
+        }
+
+        tooltip.innerHTML = `
+            <div class="tooltip-title" style="color:${color}">${title} - ${data.total || 0} events</div>
+            ${rowsHtml}`;
+
+        tooltip.classList.add('visible');
+        moveTooltip(event);
+    }
+
+    function moveTooltip(event) {
+        const tooltip = document.getElementById('donut-tooltip');
+        tooltip.style.left = (event.clientX + 14) + 'px';
+        tooltip.style.top = (event.clientY - 10) + 'px';
+    }
+
+    function hideDonutTooltip() {
+        document.getElementById('donut-tooltip').classList.remove('visible');
+    }
+
+    // Add mousemove to SVG circles to track position
+    document.addEventListener('mousemove', (e) => {
+        const tooltip = document.getElementById('donut-tooltip');
+        if (tooltip.classList.contains('visible')) moveTooltip(e);
+    });
+
+    document.getElementById('sort-field').addEventListener('change', () => renderDashboard(allItems));
+
+    function connectWebSocket() {
+    ws = new WebSocket(WS_URL);
+    
+    ws.onopen = () => {
+        console.log('WebSocket connected');
+        document.querySelector('.status-pill').innerHTML = 
+        '<div class="pulse"></div>LIVE FEED';
+    };
+    
+    ws.onmessage = (event) => {
+        const newItem = JSON.parse(event.data);
+        allItems.unshift(newItem); // add to front
+        renderDashboard(allItems);
+        
+        // Flash effect on new threat
+        if (newItem.prediction == 1) {
+        document.body.style.boxShadow = 'inset 0 0 50px rgba(255,68,68,0.3)';
+        setTimeout(() => document.body.style.boxShadow = '', 500);
+        }
+    };
+    
+    ws.onclose = () => {
+        console.log('WebSocket closed, reconnecting...');
+        document.querySelector('.status-pill').innerHTML = 
+        '<div class="pulse" style="background:var(--amber)"></div>RECONNECTING';
+        setTimeout(connectWebSocket, 3000);
+    };
+
+    ws.onerror = (err) => console.error('WebSocket error:', err);
+    }
+
+    // Initialize and load existing data then connect WebSocket
+    async function init() {
     try {
         const res = await fetch(API);
         const body = await res.json();
-        let items;
         if (body.body) {
-        items = typeof body.body === 'string' ? JSON.parse(body.body) : body.body;
+        allItems = typeof body.body === 'string' ? JSON.parse(body.body) : body.body;
         } else if (Array.isArray(body)) {
-        items = body;
-        } else {
-        items = [];
+        allItems = body;
         }
-        renderDashboard(items);
-    } catch (e) {
-        console.error('Fetch error:', e);
-        document.getElementById('table-container').innerHTML =
-        `<div class="loading">ERROR: ${e.message}</div>`;
+        renderDashboard(allItems);
+    } catch(e) {
+        console.error('Init error:', e);
     }
-    }
-
-    function renderDashboard(items) {
-    const threats = items.filter(i => i.prediction == 1 || i.prediction === '1');
-    const benign = items.filter(i => i.prediction == 0 || i.prediction === '0');
-    const total = items.length;
-    const avgScore = total > 0
-        ? (items.reduce((s, i) => s + parseFloat(i.threat_score || 0), 0) / total)
-        : 0;
-
-    document.getElementById('total').textContent = total;
-    document.getElementById('threats').textContent = threats.length;
-    document.getElementById('benign').textContent = benign.length;
-    document.getElementById('avg-score').textContent = (avgScore * 100).toFixed(0) + '%';
-
-    // Count by attack type
-    const typeCounts = {};
-    threats.forEach(i => {
-        const t = i.attack_type || i.label || 'Unknown';
-        typeCounts[t] = (typeCounts[t] || 0) + 1;
-    });
-    typeCounts['BENIGN'] = benign.length;
-
-    // Donut
-    const circ = 2 * Math.PI * 60;
-    const threatPct = total > 0 ? threats.length / total : 0;
-    const benignPct = 1 - threatPct;
-    document.getElementById('donut-threat').setAttribute('stroke-dasharray', `${threatPct * circ} ${circ}`);
-    document.getElementById('donut-benign').setAttribute('stroke-dasharray', `${benignPct * circ} ${circ}`);
-    document.getElementById('donut-benign').setAttribute('stroke-dashoffset', -(threatPct * circ));
-    document.getElementById('threat-pct').textContent = (threatPct * 100).toFixed(0) + '%';
-
-    // Legend — show each attack type
-    const colors = { BENIGN: '#00ff88', DDoS: '#ff4444', DoS: '#ff6600', PortScan: '#ffaa00', BruteForce: '#cc44ff', WebAttack: '#ff44aa', Heartbleed: '#00ffff', Infiltration: '#ff8888' };
-    const legendHtml = Object.entries(typeCounts).map(([type, count]) => `
-        <div class="legend-item">
-        <span class="legend-left"><span class="legend-dot" style="background:${colors[type] || '#888'}"></span>${type}</span>
-        <span class="legend-right">${count}</span>
-        </div>`).join('');
-    document.getElementById('legend').innerHTML = legendHtml;
-
-    // Table
-    const sorted = [...items].sort((a, b) =>
-        parseFloat(b.threat_score || 0) - parseFloat(a.threat_score || 0));
-
-    const rows = sorted.map(item => {
-        const score = parseFloat(item.threat_score || 0);
-        const isAttack = item.prediction == 1 || item.prediction === '1';
-        const label = item.attack_type || item.label || 'BENIGN';
-        const pct = (score * 100).toFixed(1);
-        const time = item.timestamp ? item.timestamp.replace('T', ' ').replace('Z', '') : '—';
-        const color = colors[label] || '#888';
-        return `
-        <tr>
-            <td style="color:var(--muted);font-size:11px">${time}</td>
-            <td style="font-size:11px">${item.event_id}</td>
-            <td>
-            <span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}44">
-                ${isAttack ? '⚠ ' : ' '}${label}
-            </span>
-            </td>
-            <td>
-            <div class="score-bar">
-                <div class="score-track">
-                <div class="score-fill ${score > 0.5 ? 'high' : 'low'}" style="width:${pct}%;background:${color}"></div>
-                </div>
-                <span class="score-num">${pct}%</span>
-            </div>
-            </td>
-        </tr>`;
-    }).join('');
-
-    document.getElementById('table-container').innerHTML = `
-        <table>
-        <thead>
-            <tr>
-            <th>Timestamp</th>
-            <th>Event ID</th>
-            <th>Attack Type</th>
-            <th>Threat Score</th>
-            </tr>
-        </thead>
-        <tbody>${rows}</tbody>
-        </table>`;
+    connectWebSocket();
     }
 
-    loadData();
-    setInterval(loadData, 30000);
+    init();
     </script>
+    <div class="tooltip" id="donut-tooltip"></div>
 </body>
 
 </html>
