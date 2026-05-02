@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IDS Platform Threat Monitor</title>
+    <link
+        href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500&display=swap"
+        rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg: #080c10;
+            --surface: #0d1117;
+            --border: #1e2d3d;
+            --green: #00ff88;
+            --red: #ff4444;
+            --amber: #ffaa00;
+            --blue: #00aaff;
+            --text: #c9d1d9;
+            --muted: #4a5568;
+            --mono: 'JetBrains Mono', monospace;
+            --sans: 'Inter', sans-serif;
+        }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: var(--sans);
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        /* Scanline overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 136, 0.015) 2px, rgba(0, 255, 136, 0.015) 4px);
+            pointer-events: none;
+            z-index: 999;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 32px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-family: var(--mono);
+            font-size: 13px;
+            color: var(--green);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+        }
+
+        .logo span {
+            color: var(--muted);
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: var(--mono);
+            font-size: 11px;
+            color: var(--green);
+            background: rgba(0, 255, 136, 0.08);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+            padding: 6px 14px;
+            border-radius: 2px;
+        }
+
+        .pulse {
+            width: 6px;
+            height: 6px;
+            background: var(--green);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.8);
+            }
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+        }
+
+        .stat-card.green::before {
+            background: var(--green);
+        }
+
+        .stat-card.red::before {
+            background: var(--red);
+        }
+
+        .stat-card.amber::before {
+            background: var(--amber);
+        }
+
+        .stat-card.blue::before {
+            background: var(--blue);
+        }
+
+        .stat-label {
+            font-family: var(--mono);
+            font-size: 10px;
+            letter-spacing: 0.15em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        .stat-value {
+            font-family: var(--mono);
+            font-size: 36px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .stat-card.green .stat-value {
+            color: var(--green);
+        }
+
+        .stat-card.red .stat-value {
+            color: var(--red);
+        }
+
+        .stat-card.amber .stat-value {
+            color: var(--amber);
+        }
+
+        .stat-card.blue .stat-value {
+            color: var(--blue);
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 16px;
+        }
+
+        .panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-title {
+            font-family: var(--mono);
+            font-size: 11px;
+            letter-spacing: 0.15em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .refresh-btn {
+            font-family: var(--mono);
+            font-size: 10px;
+            color: var(--blue);
+            background: none;
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            padding: 4px 10px;
+            cursor: pointer;
+            letter-spacing: 0.1em;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: rgba(0, 170, 255, 0.1);
+            border-color: var(--blue);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: var(--mono);
+            font-size: 12px;
+        }
+
+        th {
+            text-align: left;
+            padding: 10px 20px;
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--border);
+            font-weight: 400;
+        }
+
+        td {
+            padding: 12px 20px;
+            border-bottom: 1px solid rgba(30, 45, 61, 0.5);
+            color: var(--text);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 3px 10px;
+            font-size: 10px;
+            letter-spacing: 0.1em;
+            font-weight: 600;
+            border-radius: 2px;
+        }
+
+        .badge-ddos {
+            background: rgba(255, 68, 68, 0.12);
+            color: var(--red);
+            border: 1px solid rgba(255, 68, 68, 0.3);
+        }
+
+        .badge-benign {
+            background: rgba(0, 255, 136, 0.08);
+            color: var(--green);
+            border: 1px solid rgba(0, 255, 136, 0.2);
+        }
+
+        .score-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .score-track {
+            flex: 1;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            border-radius: 2px;
+            transition: width 0.5s ease;
+        }
+
+        .score-fill.high {
+            background: var(--red);
+        }
+
+        .score-fill.low {
+            background: var(--green);
+        }
+
+        .score-num {
+            font-size: 11px;
+            color: var(--muted);
+            min-width: 36px;
+            text-align: right;
+        }
+
+        /* Donut chart */
+        .donut-wrap {
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .donut-svg {
+            transform: rotate(-90deg);
+        }
+
+        .donut-center {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .donut-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 160px;
+            height: 160px;
+        }
+
+        .donut-pct {
+            font-family: var(--mono);
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--red);
+            line-height: 1;
+        }
+
+        .donut-label {
+            font-family: var(--mono);
+            font-size: 9px;
+            letter-spacing: 0.1em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .legend {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-family: var(--mono);
+            font-size: 11px;
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+            display: inline-block;
+        }
+
+        .legend-left {
+            display: flex;
+            align-items: center;
+            color: var(--muted);
+        }
+
+        .legend-right {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .loading {
+            padding: 40px;
+            text-align: center;
+            font-family: var(--mono);
+            font-size: 12px;
+            color: var(--muted);
+            letter-spacing: 0.1em;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(3, end) infinite;
+        }
+
+        @keyframes dots {
+
+            0%,
+            20% {
+                content: '.';
+            }
+
+            40% {
+                content: '..';
+            }
+
+            60%,
+            100% {
+                content: '...';
+            }
+        }
+
+        @media (max-width: 900px) {
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header>
+        <div class="logo">IDS PLATFORM THREAT MONITOR</div>
+        <div class="status-pill">
+            <div class="pulse"></div>SYSTEM ONLINE
+        </div>
+    </header>
+
+    <div class="stats-grid">
+        <div class="stat-card blue">
+            <div class="stat-label">Total Events</div>
+            <div class="stat-value" id="total">—</div>
+        </div>
+        <div class="stat-card red">
+            <div class="stat-label">Threats Detected</div>
+            <div class="stat-value" id="threats">—</div>
+        </div>
+        <div class="stat-card green">
+            <div class="stat-label">Benign Traffic</div>
+            <div class="stat-value" id="benign">—</div>
+        </div>
+        <div class="stat-card amber">
+            <div class="stat-label">Avg Threat Score</div>
+            <div class="stat-value" id="avg-score">—</div>
+        </div>
+    </div>
+
+    <div class="main-grid">
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Event Log</span>
+                <button class="refresh-btn" onclick="loadData()">REFRESH</button>
+            </div>
+            <div id="table-container">
+                <div class="loading">LOADING</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <span class="panel-title">Traffic Analysis</span>
+            </div>
+            <div class="donut-wrap">
+                <div class="donut-container">
+                    <svg class="donut-svg" width="160" height="160" viewBox="0 0 160 160">
+                        <circle cx="80" cy="80" r="60" fill="none" stroke="#1e2d3d" stroke-width="20" />
+                        <circle id="donut-threat" cx="80" cy="80" r="60" fill="none" stroke="#ff4444" stroke-width="20"
+                            stroke-dasharray="0 377" stroke-linecap="butt" />
+                        <circle id="donut-benign" cx="80" cy="80" r="60" fill="none" stroke="#00ff88" stroke-width="20"
+                            stroke-dasharray="0 377" stroke-linecap="butt" />
+                    </svg>
+                    <div class="donut-center">
+                        <div class="donut-pct" id="threat-pct">—</div>
+                        <div class="donut-label">threats</div>
+                    </div>
+                </div>
+                <div class="legend" id="legend">
+                    <div class="legend-item">
+                        <span class="legend-left"><span class="legend-dot" style="background:var(--red)"></span>DDoS /
+                            Attack</span>
+                        <span class="legend-right" id="leg-threats">—</span>
+                    </div>
+                    <div class="legend-item">
+                        <span class="legend-left"><span class="legend-dot"
+                                style="background:var(--green)"></span>Benign</span>
+                        <span class="legend-right" id="leg-benign">—</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    const API = 'https://6ly8jrd3t5.execute-api.us-east-2.amazonaws.com/prod/results';
+
+    async function loadData() {
+    try {
+        const res = await fetch(API);
+        const body = await res.json();
+        let items;
+        if (body.body) {
+        items = typeof body.body === 'string' ? JSON.parse(body.body) : body.body;
+        } else if (Array.isArray(body)) {
+        items = body;
+        } else {
+        items = [];
+        }
+        renderDashboard(items);
+    } catch (e) {
+        console.error('Fetch error:', e);
+        document.getElementById('table-container').innerHTML =
+        `<div class="loading">ERROR: ${e.message}</div>`;
+    }
+    }
+
+    function renderDashboard(items) {
+    const threats = items.filter(i => i.prediction == 1 || i.prediction === '1');
+    const benign = items.filter(i => i.prediction == 0 || i.prediction === '0');
+    const total = items.length;
+    const avgScore = total > 0
+        ? (items.reduce((s, i) => s + parseFloat(i.threat_score || 0), 0) / total)
+        : 0;
+
+    document.getElementById('total').textContent = total;
+    document.getElementById('threats').textContent = threats.length;
+    document.getElementById('benign').textContent = benign.length;
+    document.getElementById('avg-score').textContent = (avgScore * 100).toFixed(0) + '%';
+
+    // Count by attack type
+    const typeCounts = {};
+    threats.forEach(i => {
+        const t = i.attack_type || i.label || 'Unknown';
+        typeCounts[t] = (typeCounts[t] || 0) + 1;
+    });
+    typeCounts['BENIGN'] = benign.length;
+
+    // Donut
+    const circ = 2 * Math.PI * 60;
+    const threatPct = total > 0 ? threats.length / total : 0;
+    const benignPct = 1 - threatPct;
+    document.getElementById('donut-threat').setAttribute('stroke-dasharray', `${threatPct * circ} ${circ}`);
+    document.getElementById('donut-benign').setAttribute('stroke-dasharray', `${benignPct * circ} ${circ}`);
+    document.getElementById('donut-benign').setAttribute('stroke-dashoffset', -(threatPct * circ));
+    document.getElementById('threat-pct').textContent = (threatPct * 100).toFixed(0) + '%';
+
+    // Legend — show each attack type
+    const colors = { BENIGN: '#00ff88', DDoS: '#ff4444', DoS: '#ff6600', PortScan: '#ffaa00', BruteForce: '#cc44ff', WebAttack: '#ff44aa', Heartbleed: '#00ffff', Infiltration: '#ff8888' };
+    const legendHtml = Object.entries(typeCounts).map(([type, count]) => `
+        <div class="legend-item">
+        <span class="legend-left"><span class="legend-dot" style="background:${colors[type] || '#888'}"></span>${type}</span>
+        <span class="legend-right">${count}</span>
+        </div>`).join('');
+    document.getElementById('legend').innerHTML = legendHtml;
+
+    // Table
+    const sorted = [...items].sort((a, b) =>
+        parseFloat(b.threat_score || 0) - parseFloat(a.threat_score || 0));
+
+    const rows = sorted.map(item => {
+        const score = parseFloat(item.threat_score || 0);
+        const isAttack = item.prediction == 1 || item.prediction === '1';
+        const label = item.attack_type || item.label || 'BENIGN';
+        const pct = (score * 100).toFixed(1);
+        const time = item.timestamp ? item.timestamp.replace('T', ' ').replace('Z', '') : '—';
+        const color = colors[label] || '#888';
+        return `
+        <tr>
+            <td style="color:var(--muted);font-size:11px">${time}</td>
+            <td style="font-size:11px">${item.event_id}</td>
+            <td>
+            <span class="badge" style="background:${color}18;color:${color};border:1px solid ${color}44">
+                ${isAttack ? '⚠ ' : ' '}${label}
+            </span>
+            </td>
+            <td>
+            <div class="score-bar">
+                <div class="score-track">
+                <div class="score-fill ${score > 0.5 ? 'high' : 'low'}" style="width:${pct}%;background:${color}"></div>
+                </div>
+                <span class="score-num">${pct}%</span>
+            </div>
+            </td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('table-container').innerHTML = `
+        <table>
+        <thead>
+            <tr>
+            <th>Timestamp</th>
+            <th>Event ID</th>
+            <th>Attack Type</th>
+            <th>Threat Score</th>
+            </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+        </table>`;
+    }
+
+    loadData();
+    setInterval(loadData, 30000);
+    </script>
+</body>
+
+</html>

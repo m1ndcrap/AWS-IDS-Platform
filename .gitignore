@@ -226,3 +226,8 @@ lambda/deployment.zip
 test_event.json
 attack_event.json
 real_ddos_event.json
+bruteforce.json
+ddos.json
+dos.json
+portscan.json
+webattack.json
