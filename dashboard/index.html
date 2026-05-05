@@ -554,7 +554,7 @@
     </div>
 
     <script>
-    const API = 'https://6ly8jrd3t5.execute-api.us-east-2.amazonaws.com/prod/results';
+    const API = 'YOUR RESULTS IDS API ENDPOINT HERE';
 
     function renderDashboard(items) {
         const threats = items.filter(i => i.prediction == 1 || i.prediction === '1');
@@ -669,7 +669,7 @@
     }
 
     // WebSocket real-time feed implementation
-    const WS_URL = 'wss://229ixzo7u7.execute-api.us-east-2.amazonaws.com/prod';
+    const WS_URL = 'YOUR WEBSOCKET API ENDPOINT HERE';
     let ws;
     let allItems = [];
     let sortAsc = false;
