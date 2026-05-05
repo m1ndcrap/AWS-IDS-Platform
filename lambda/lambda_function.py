@@ -16,7 +16,7 @@ CLASSES_KEY = 'models/classes.json'
 TABLE_NAME = 'ids-results'
 CONNECTIONS_TABLE = 'ids-connections'
 TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
-WS_ENDPOINT = 'https://229ixzo7u7.execute-api.us-east-2.amazonaws.com/prod'
+WS_ENDPOINT = 'YOUR WEBSOCKET API ENDPOINT FROM AWS'
 
 # Load at cold start
 s3.download_file(BUCKET, MODEL_KEY, '/tmp/model.joblib')
@@ -55,41 +55,72 @@ def broadcast(message):
 
 def lambda_handler(event, context):
     for record in event['Records']:
-        payload = json.loads(record['body'])
+        try:
+            payload = json.loads(record['body'])
+            clean_payload = {str(k).strip(): v for k, v in payload.items()}
 
-        features = [float(payload.get(col, 0)) for col in feature_cols]
-        features = np.array(features).reshape(1, -1)
+            aligned_features = []
+            missing_cols = []
 
-        prediction = model.predict(features)[0]
-        probas = model.predict_proba(features)[0]
-        threat_score = float(1 - probas[classes.index('BENIGN')])
+            # Safely align features to the exact training order manually
+            for col in feature_cols:
+                clean_col = col.strip()
+                
+                # Patch for the CIC-IDS-2017 duplicate column bug
+                if clean_col == 'Fwd Header Length55' and 'Fwd Header Length55' not in clean_payload:
+                    val = clean_payload.get('Fwd Header Length34', 0.0)
+                else:
+                    val = clean_payload.get(clean_col, None)
 
-        item = {
-            'event_id': payload['event_id'],
-            'timestamp': payload['timestamp'],
-            'label': prediction,
-            'prediction': 0 if prediction == 'BENIGN' else 1,
-            'threat_score': str(round(threat_score, 4)),
-            'attack_type': prediction
-        }
+                if val is None:
+                    missing_cols.append(clean_col)
+                    val = 0.0
+                
+                aligned_features.append(float(val))
 
-        table.put_item(Item=item)
+            if missing_cols:
+                print(f"[WARNING] Payload missing columns, defaulting to 0.0: {missing_cols}")
 
-        if prediction != 'BENIGN':
-            sns.publish(
-                TopicArn=TOPIC_ARN,
-                Subject=f'Intrusion detected: {prediction}',
-                Message=f"Attack type: {prediction} | Threat score: {threat_score:.2%} | Event: {payload['event_id']} | Time: {payload['timestamp']}"
-            )
+            # Force pure NumPy 32-bit float precision
+            np_features = np.array(aligned_features, dtype=np.float32).reshape(1, -1)
 
-        # Broadcast to WebSocket clients
-        broadcast({
-            'event_id': item['event_id'],
-            'timestamp': item['timestamp'],
-            'label': prediction,
-            'prediction': 0 if prediction == 'BENIGN' else 1,
-            'threat_score': str(round(threat_score, 4)),
-            'attack_type': prediction
-        })
+            # Predict
+            prediction = model.predict(np_features)[0]
+            probas = model.predict_proba(np_features)[0]
+            threat_score = float(1 - probas[classes.index('BENIGN')])
+
+            print(f"[LOG] Event: {payload.get('event_id')} | Pred: {prediction} | Score: {threat_score:.4f}")
+
+            # Database & Notifications
+            item = {
+                'event_id': payload['event_id'],
+                'timestamp': payload['timestamp'],
+                'label': prediction,
+                'prediction': 0 if prediction == 'BENIGN' else 1,
+                'threat_score': str(round(threat_score, 4)),
+                'attack_type': prediction
+            }
+
+            table.put_item(Item=item)
+
+            if prediction != 'BENIGN':
+                sns.publish(
+                    TopicArn=TOPIC_ARN,
+                    Subject=f'Intrusion detected: {prediction}',
+                    Message=f"Attack type: {prediction} | Threat score: {threat_score:.2%} | Event: {payload['event_id']} | Time: {payload['timestamp']}"
+                )
+
+            broadcast({
+                'event_id': item['event_id'],
+                'timestamp': item['timestamp'],
+                'label': prediction,
+                'prediction': 0 if prediction == 'BENIGN' else 1,
+                'threat_score': str(round(threat_score, 4)),
+                'attack_type': prediction
+            })
+            
+        except Exception as e:
+            print(f"[FATAL ERROR] Processing failed for record: {str(e)}")
+            raise e
 
     return {'statusCode': 200, 'body': 'OK'}
