@@ -1,7 +1,10 @@
 import boto3
+import os
+from dotenv import load_dotenv
+load_dotenv()
 
-dynamodb = boto3.resource('dynamodb', region_name='YOUR REGION NAME')
-table = dynamodb.Table('ids-results')
+dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION', 'us-east-2'))
+table = dynamodb.Table(os.getenv('DYNAMODB_TABLE', 'ids-results'))
 
 print(f"Scanning and deleting all items in {table.name}...")
 

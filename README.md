@@ -89,7 +89,7 @@ weighted avg       1.00      1.00      1.00     28294
 | Service                          | Purpose                                                   |
 | -------------------------------- | --------------------------------------------------------- |
 | S3 (`aws-ids-platform`)          | Raw CICIDS CSVs, processed features, model artifacts      |
-| Glue (`ids-etl-all-attacks`)     | ETL pipeline — cleans and normalizes raw CSVs             |
+| Glue (`ids-etl-all-attacks`)     | ETL pipeline (cleans and normalizes raw CSVs)             |
 | SageMaker                        | Notebook-based model training and evaluation              |
 | SQS (`ids-events`)               | Decouples traffic ingestion from inference                |
 | Lambda (`ids-inference`)         | Loads model, runs inference, writes results, sends alerts |

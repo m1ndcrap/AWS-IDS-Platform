@@ -9,14 +9,14 @@ s3 = boto3.client('s3')
 dynamodb = boto3.resource('dynamodb')
 sns = boto3.client('sns')
 
-BUCKET = 'aws-ids-platform'
+BUCKET = os.getenv('S3_BUCKET', 'aws-ids-platform')
 MODEL_KEY = 'models/rf_model.joblib'
 FEATURES_KEY = 'models/feature_cols.json'
 CLASSES_KEY = 'models/classes.json'
-TABLE_NAME = 'ids-results'
-CONNECTIONS_TABLE = 'ids-connections'
+TABLE_NAME = os.getenv('DYNAMODB_TABLE', 'ids-results')
+CONNECTIONS_TABLE = os.getenv('DYNAMODB_CONNECTIONS_TABLE', 'ids-connections')
 TOPIC_ARN = os.environ['SNS_TOPIC_ARN']
-WS_ENDPOINT = 'YOUR WEBSOCKET API ENDPOINT FROM AWS'
+WS_ENDPOINT = os.getenv('WS_ENDPOINT')
 
 # Load at cold start
 s3.download_file(BUCKET, MODEL_KEY, '/tmp/model.joblib')

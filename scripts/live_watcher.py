@@ -5,10 +5,12 @@ import boto3
 import uuid
 import glob
 from datetime import datetime, timezone
+from dotenv import load_dotenv
+load_dotenv()
 
 # AWS Configuration
-QUEUE_URL = 'YOUR SQS QUEUE URL FOR ids-events'
-sqs = boto3.client('sqs', region_name='YOUR REGION NAME')
+QUEUE_URL = os.getenv('SQS_QUEUE_URL')
+sqs = boto3.client('sqs', region_name=os.getenv('AWS_REGION', 'us-east-2'))
 
 COLUMN_MAP = {
     'Dst Port': 'Destination Port',
@@ -134,7 +136,7 @@ def watch_live_csv(file_path):
                 process_and_send(dict(zip(headers, row_values)))
 
 if __name__ == '__main__':
-    DAILY_DIR = 'YOUR CICFLOWMETER .CSV DIRECTORY PATH' # e.g. /home/kali/CICFlowMeter/data/daily/
+    DAILY_DIR = os.getenv('CICFLOWMETER_OUTPUT_DIR', '/home/kali/CICFlowMeter/data/daily/')
     latest_csv = None
 
     while not latest_csv:
