@@ -1,4 +1,4 @@
-# AWS-IDS-Platform
+# AWS IDS Platform
 
 ### Cloud-Native AI-Powered Intrusion Detection System
 
