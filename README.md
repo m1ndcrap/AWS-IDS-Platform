@@ -3,6 +3,7 @@
 ### Cloud-Native AI-Powered Intrusion Detection System
 
 A production-grade, cloud-native intrusion detection system built on AWS that captures live network traffic, extracts flow features, applies ML-based multi-class threat classification, and delivers email alerts and real-time feed on dashboards.
+Check out the dashboard that showcases live data from my Kali Linux and Ubuntu VMs at https://aws-ids-dashboard.onrender.com/!
 
 ## Architecture
 
